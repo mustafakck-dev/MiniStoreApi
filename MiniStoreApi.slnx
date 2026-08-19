@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".env" />
+    <File Path=".env.example" />
+    <File Path=".gitignore" />
+    <File Path="compose.yaml" />
+    <File Path="Dockerfile" />
+  </Folder>
+  <Project Path="Entities/Entities.csproj" />
+  <Project Path="MiniStore.Worker/MiniStore.Worker.csproj" />
+  <Project Path="MiniStoreApi.IntegrationTests/MiniStoreApi.IntegrationTests.csproj" Id="c2ba092c-2b39-4e32-a875-a935eaa14f6d" />
+  <Project Path="MiniStoreApi.Tests/MiniStoreApi.Tests.csproj" Id="af58c5b4-27ac-4973-a69b-635b8757b188" />
+  <Project Path="Presentation/Presentation.csproj" />
+  <Project Path="Repositories/Repositories.csproj" />
+  <Project Path="Services/Services.csproj" />
+  <Project Path="WebApi/WebApi.csproj" />
+</Solution>

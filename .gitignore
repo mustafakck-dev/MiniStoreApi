@@ -1,0 +1,32 @@
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Build outputs
+bin/
+obj/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Temporary / backup files
+*.tmp
+*.bak
+*.Backup.tmp
+
+# Local application settings
+**/appsettings.Development.json
+**/appsettings.Local.json
+
+# Test results / coverage
+TestResults/
+coverage/
+coverage.*
+
+# Logs
+*.log

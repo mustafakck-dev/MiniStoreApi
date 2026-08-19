@@ -1,0 +1,30 @@
+﻿using Repositories.Contracts;
+using Repositories.EFCore;
+
+public class RepositoryManager : IRepositoryManager
+{
+    private readonly RepositoryContext _repositoryContext;
+    private readonly Lazy<IProductRepository> _productRepository;
+    private readonly Lazy<ICategoryRepository> _categoryRepository;
+    private readonly Lazy<IOrderRepository> _orderRepository;
+
+    public RepositoryManager(RepositoryContext repositoryContext)
+    {
+        _repositoryContext = repositoryContext;
+
+        _productRepository = new Lazy<IProductRepository>(() => new ProductRepository(repositoryContext));
+        _categoryRepository = new Lazy<ICategoryRepository>(() => new CategoryRepository(repositoryContext));
+        _orderRepository = new Lazy<IOrderRepository>(() => new OrderRepository(repositoryContext));
+    }
+
+    public IProductRepository Product => _productRepository.Value;
+
+    public ICategoryRepository Category => _categoryRepository.Value;
+
+    public IOrderRepository Order => _orderRepository.Value;
+
+    public async Task SaveAsync()
+    {
+        await _repositoryContext.SaveChangesAsync();
+    }
+}
