@@ -1,8 +1,28 @@
 # MiniStoreApi
 
+[![.NET](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
+[![Tests](https://img.shields.io/badge/tests-16%20passing-brightgreen)](#testing)
+[![Docker](https://img.shields.io/badge/docker-ready-2496ED?logo=docker)](#docker)
+[![License](https://img.shields.io/badge/license-MIT-blue)](#license)
+
 MiniStoreApi is a backend-focused e-commerce Web API developed with ASP.NET Core as a learning project for applying common backend development concepts and infrastructure tools in a single application.
 
 The project follows a layered architecture and includes authentication and authorization, product and category management, order processing, searching, filtering, pagination, distributed caching with Redis, asynchronous messaging with RabbitMQ, automated tests, and Docker-based containerization.
+
+## Table of Contents
+
+- [Tech Stack](#tech-stack)
+- [Architecture](#architecture)
+- [Quick Start](#quick-start)
+- [Screenshots](#screenshots)
+- [API Endpoints](#api-endpoints)
+- [Features](#features)
+- [Design Decisions](#design-decisions)
+- [Redis Caching](#redis-caching)
+- [RabbitMQ Messaging](#rabbitmq-messaging)
+- [Testing](#testing)
+- [Security](#security)
+- [Project Purpose](#project-purpose)
 
 ## Tech Stack
 
@@ -15,10 +35,8 @@ The project follows a layered architecture and includes authentication and autho
 - AutoMapper
 - Redis
 - RabbitMQ
-- Docker
-- Docker Compose
-- xUnit
-- Moq
+- Docker / Docker Compose
+- xUnit / Moq
 
 ## Architecture
 
@@ -84,31 +102,91 @@ MiniStoreApi
 |-- MiniStoreApi.IntegrationTests
 ```
 
+## Quick Start
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/mustafakck-dev/MiniStoreApi.git
+cd MiniStoreApi
+
+# 2. Set up environment variables
+cp .env.example .env
+# (on Windows, create .env manually from .env.example)
+
+# 3. Start the infrastructure (API, SQL Server, Redis, RabbitMQ)
+docker compose up -d --build
+
+# 4. Run the background worker (in a separate terminal)
+$env:RabbitMq__Host="localhost"
+$env:RabbitMq__UserName="ministore"
+$env:RabbitMq__Password="YourRabbitMqPasswordHere"
+dotnet run --project MiniStore.Worker
+```
+
+Once running, the application is available at:
+
+| Service | URL |
+|---|---|
+| API (Swagger) | http://localhost:8081/swagger |
+| RabbitMQ Management UI | http://localhost:15672 |
+
+## Screenshots
+
+**Swagger UI** — full endpoint surface (Authentication, Categories, Orders, Products):
+
+![Swagger UI](docs/screenshots/swagger.png)
+
+**Worker consuming a message** — the background Worker connects, listens on `order-created`, and processes an incoming order end-to-end:
+
+```text
+info: MiniStore.Worker.Worker[0]
+      Worker order-created queue'sunu dinliyor.
+info: MiniStore.Worker.Worker[0]
+      Sipariş mesajı işlendi. OrderId: 3002, CreatedAt: 08/19/2026 19:49:07
+```
+
+![Worker consuming a message](docs/screenshots/worker-log.png)
+
+**RabbitMQ Management UI** — the `order-created` queue with the Worker actively attached as a consumer using manual acknowledgement:
+
+![RabbitMQ Queue with active consumer](docs/screenshots/rabbitmq-queue.png)
+
+> To reproduce: start the full stack with `docker compose up -d --build`, run the Worker (`dotnet run --project MiniStore.Worker`), then create an order via Swagger (`POST /api/orders`). The Worker log will show the message being consumed, and the RabbitMQ Management UI (`http://localhost:15672` → Queues and Streams → `order-created`) will show `Consumers: 1` with manual ack enabled.
+
+## API Endpoints
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| POST | `/api/authentication/register` | No | Register a new user |
+| POST | `/api/authentication/login` | No | Authenticate and receive a JWT |
+| GET | `/api/categories` | No | List categories |
+| POST | `/api/categories` | Admin | Create a category |
+| GET | `/api/categories/{id}` | No | Get a single category |
+| PUT | `/api/categories/{id}` | Admin | Update a category |
+| DELETE | `/api/categories/{id}` | Admin | Delete a category |
+| GET | `/api/orders` | User | List orders |
+| POST | `/api/orders` | User | Create an order (validates stock, publishes `OrderCreatedMessage`) |
+| GET | `/api/orders/{id}` | User | Get order details |
+| GET | `/api/products` | No | List products (search, filter, sort, paginate) |
+| GET | `/api/products/{id}` | No | Get a single product |
+| POST | `/api/products` | Admin | Create a product |
+| PUT | `/api/products/{id}` | Admin | Update a product |
+| DELETE | `/api/products/{id}` | Admin | Delete a product |
+
 ## Features
 
 ### Product Management
 
-The API provides product operations including:
-
-- Product creation
-- Product retrieval
-- Product updates
-- Product deletion
+- Product creation, retrieval, updates, deletion
 - Category-based filtering
 - Price filtering
 - Searching
 - Sorting
-- Pagination
-
-Pagination metadata is returned through the `X-Pagination` response header.
-
-Example:
+- Pagination (metadata returned via the `X-Pagination` response header)
 
 ```http
 GET /api/products?pageNumber=1&pageSize=10
 ```
-
-Additional query parameters can be used for searching, filtering, and sorting products.
 
 ### Category Management
 
@@ -117,8 +195,6 @@ Categories are managed separately and are associated with products through Entit
 ### Authentication
 
 Authentication is implemented using ASP.NET Core Identity and JWT.
-
-The authentication flow is:
 
 ```text
 User Login
@@ -136,24 +212,16 @@ JWT Generated
 Client sends JWT with requests
 ```
 
-Authenticated requests use:
-
 ```http
 Authorization: Bearer <token>
 ```
 
 ### Role-Based Authorization
 
-The application supports role-based authorization.
-
-Current roles include:
-
 ```text
 User
 Admin
 ```
-
-Product modification operations are restricted to administrators.
 
 ```text
 GET     -> Public
@@ -163,10 +231,6 @@ DELETE  -> Admin
 ```
 
 ### Order Processing
-
-Authenticated users can create orders containing multiple items.
-
-The order workflow includes:
 
 ```text
 Create Order Request
@@ -190,21 +254,19 @@ Calculate Total Price
 Save Order
 ```
 
-Custom exceptions are used for scenarios such as:
+Custom exceptions handle scenarios such as product/category/order not found, invalid price range, and insufficient stock. A centralized exception handler converts these into appropriate HTTP responses.
 
-- Product not found
-- Category not found
-- Order not found
-- Invalid price range
-- Insufficient stock
+## Design Decisions
 
-A centralized exception handler converts application exceptions into appropriate HTTP responses.
+A few deliberate architectural choices worth calling out:
+
+- **Cache-aside over write-through.** Reads are far more frequent than writes for product data in this domain, so cache-aside keeps writes simple (write to DB, then invalidate) rather than paying the complexity cost of keeping the cache and DB synchronized on every write.
+- **Manual ACK/NACK instead of automatic acknowledgement.** Auto-ack would mark a message as processed the instant RabbitMQ delivers it — if the Worker crashed mid-processing, the message would be lost. Manual ACK guarantees a message is only removed from the queue after it has been successfully handled, with NACK/requeue as the fallback for failures.
+- **Layered architecture instead of Clean Architecture.** For the scope of this project (a single bounded domain, no need to swap infrastructure), a layered approach keeps the mental model simple while still enforcing separation between API, business logic, and data access. Clean Architecture's extra abstraction (use cases, inversion at the domain boundary) is explored in a follow-up project ([EventHub](#), still in progress) where the added complexity is actually justified by multiple modules and stricter domain isolation.
 
 ## Redis Caching
 
-Redis is used as a distributed cache.
-
-The project applies the cache-aside pattern for frequently requested product data.
+Redis is used as a distributed cache, applying the cache-aside pattern for frequently requested product data.
 
 ```text
 GET Product
@@ -229,7 +291,7 @@ Cache invalidation is performed when product data changes to prevent stale data 
 
 RabbitMQ is used for asynchronous order-created messages.
 
-Producer flow:
+**Producer flow:**
 
 ```text
 OrderService
@@ -241,16 +303,14 @@ OrderCreatedMessage
 RabbitMqPublisher
      |
      v
-ministore.orders
-Exchange
+ministore.orders Exchange
      |
      | order.created
      v
-order-created
-Queue
+order-created Queue
 ```
 
-Consumer flow:
+**Consumer flow:**
 
 ```text
 order-created Queue
@@ -268,15 +328,17 @@ Process Message
 ACK
 ```
 
-The Worker uses manual acknowledgements so that messages are acknowledged only after successful processing.
+The Worker uses manual acknowledgements so messages are acknowledged only after successful processing, with NACK/requeue behavior for failed processing.
 
-Basic NACK and requeue behavior is also implemented for failed message processing.
+**Topology:**
+
+| | Value |
+|---|---|
+| Exchange | `ministore.orders` |
+| Queue | `order-created` |
+| Routing Key | `order.created` |
 
 ## Docker
-
-The main infrastructure can be started using Docker Compose.
-
-The Docker environment contains:
 
 ```text
 ASP.NET Core API
@@ -286,16 +348,6 @@ RabbitMQ
 ```
 
 ### Environment Variables
-
-Copy `.env.example`:
-
-```bash
-cp .env.example .env
-```
-
-On Windows, you can also create a `.env` file manually from `.env.example`.
-
-Example configuration:
 
 ```env
 MSSQL_SA_PASSWORD=YourStrongPasswordHere
@@ -308,129 +360,19 @@ RABBITMQ_USER=ministore
 RABBITMQ_PASSWORD=YourRabbitMqPasswordHere
 ```
 
-The real `.env` file is excluded from Git.
-
-### Start Containers
-
-```bash
-docker compose up -d --build
-```
-
-Check the running containers:
-
-```bash
-docker compose ps
-```
-
-The API is available by default at:
-
-```text
-http://localhost:8081
-```
-
-RabbitMQ Management UI is available at:
-
-```text
-http://localhost:15672
-```
-
-## RabbitMQ Initial Setup
-
-The current RabbitMQ implementation expects the following topology:
-
-### Exchange
-
-```text
-ministore.orders
-```
-
-### Queue
-
-```text
-order-created
-```
-
-### Routing Key
-
-```text
-order.created
-```
-
-Binding:
-
-```text
-ministore.orders
-        |
-        | order.created
-        v
-order-created
-```
-
-These can be configured through the RabbitMQ Management UI.
-
-## Running the Worker
-
-The background consumer is located in:
-
-```text
-MiniStore.Worker
-```
-
-Before running the Worker locally, configure the RabbitMQ credentials using environment variables.
-
-PowerShell example:
-
-```powershell
-$env:RabbitMq__Host="localhost"
-$env:RabbitMq__UserName="ministore"
-$env:RabbitMq__Password="YourRabbitMqPasswordHere"
-
-dotnet run --project MiniStore.Worker
-```
-
-When running correctly:
-
-```text
-Worker order-created queue'sunu dinliyor.
-```
-
-After an order is created, the Worker consumes the `OrderCreatedMessage` and acknowledges it.
+The real `.env` file is excluded from Git — see [Quick Start](#quick-start) for setup.
 
 ## Database
 
-SQL Server is used as the relational database.
-
-Entity Framework Core is used for:
-
-- Entity mapping
-- Relationships
-- LINQ queries
-- Migrations
-- Database access
-- Change tracking
-
-Database migrations are stored under:
-
-```text
-Repositories/Migrations
-```
+SQL Server is used as the relational database. Entity Framework Core handles entity mapping, relationships, LINQ queries, migrations, database access, and change tracking. Migrations are stored under `Repositories/Migrations`.
 
 ## Testing
 
 The solution contains both unit tests and integration tests.
 
-### Unit Tests
+**Unit tests** focus on service-layer business logic using xUnit and Moq, with repositories, AutoMapper, logging, and cache services mocked.
 
-Unit tests focus mainly on service-layer business logic using:
-
-- xUnit
-- Moq
-
-Dependencies such as repositories, AutoMapper, logging, and cache services are mocked.
-
-### Integration Tests
-
-Integration tests validate multiple application components working together, including:
+**Integration tests** validate multiple components working together:
 
 ```text
 HTTP Request
@@ -454,13 +396,9 @@ Repository
 Database
 ```
 
-Run all tests:
-
 ```bash
 dotnet test MiniStoreApi.slnx
 ```
-
-Current result:
 
 ```text
 Total tests: 16
@@ -468,45 +406,16 @@ Passed: 16
 Failed: 0
 ```
 
-Build the solution:
-
 ```bash
 dotnet build MiniStoreApi.slnx
 ```
 
 ## Security
 
-Sensitive values such as database passwords, RabbitMQ credentials, and JWT secrets should not be committed to source control.
-
-The repository excludes local secrets through `.gitignore`.
-
-Files such as the following should remain local:
-
-```text
-.env
-appsettings.Development.json
-```
-
-Example configuration files contain placeholder values only.
+Sensitive values (database passwords, RabbitMQ credentials, JWT secrets) are never committed to source control. `.gitignore` excludes local secrets such as `.env` and `appsettings.Development.json`. Example configuration files contain placeholder values only.
 
 ## Project Purpose
 
-MiniStoreApi was developed to practice and demonstrate common backend engineering concepts beyond basic CRUD operations.
+MiniStoreApi was built to go beyond basic CRUD and practice the infrastructure decisions that separate a tutorial project from a production-minded one: how to keep a cache consistent with its source of truth, how to process messages reliably instead of just "sending" them, and how to structure a codebase so business rules don't leak into controllers.
 
-The project focuses on:
-
-- Layered application design
-- RESTful API development
-- Dependency Injection
-- Entity Framework Core
-- Authentication and authorization
-- Business rules
-- Error handling
-- Searching and filtering
-- Pagination
-- Distributed caching
-- Asynchronous messaging
-- Background processing
-- Containerization
-- Unit testing
-- Integration testing
+The hardest part was getting message acknowledgement right — moving from an auto-ack setup (where a Worker crash silently loses orders) to manual ACK/NACK forced a much better understanding of what "reliable messaging" actually guarantees, and what it doesn't. That question — how does a system stay correct under concurrent load and partial failure — is the direct motivation for the next project, [EventHub](#), which focuses on concurrency, transactions, and distributed systems in more depth.
